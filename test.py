@@ -41,18 +41,23 @@ for i,c in enumerate(cs):
 
 sz0 = max(edges[:,0])
 sz1 = max(edges[:,1])
-print(sz0, sz1)
-
+sz = max(sz0, sz1) + 1
 print(edges)
-adj = np.zeros((sz0+1,sz1+1), dtype=int)
+adj = np.zeros((sz, sz), dtype=int)
 for i in range(n):
     adj[edges[i,0], edges[i,1]] += 1
 print(adj)
 # plt.imshow(adj,cmap='gist_rainbow')
-plt.spy(adj)
-plt.show()
+# plt.spy(adj)
 
 
 # a = DirichletProcessDiscrete(ap=10)
 # plt.hist([a.sample() for _ in range(1000)], bins=100)
 # plt.show()
+
+import networkx as nx
+adj = np.matrix(adj)
+G = nx.from_numpy_matrix(adj)
+nx.draw(G)
+plt.show()
+

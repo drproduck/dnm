@@ -1,14 +1,15 @@
 import numpy as np
 from numpy.random import choice
 import matplotlib.pyplot as plt
+import networkx as nx
 
 
 def get_data(fname):
     """should return an (n,2) array of edges"""
     f = open(fname, 'r')
     res = np.array([list(map(int, line.strip().split(' '))) for line in f], dtype=int)
-    sz = res.max(axis=0) + 1
-    adj = np.zeros(sz, dtype=int)
+    sz = int(res.flatten().max() + 1)
+    adj = np.zeros((sz, sz), dtype=int)
 
     for e in res:
         adj[e[0], e[1]] += 1
@@ -27,9 +28,9 @@ def mdnd(n_clusters, edges):
     }
 
     fixed = {
-        'alpha_D': 100, # control the number of clusters
-        'tau': 10, # control cluster overlap
-        'gamma_H': 1, # control number of nodes
+        'alpha_D': 10, # control the number of clusters
+        'tau': 5, # control cluster overlap
+        'gamma_H': 5, # control number of nodes
         'edges': edges,
         'n_edges': n_edges,
         # 'node_indices': set(),
@@ -41,8 +42,8 @@ def mdnd(n_clusters, edges):
     }
 
     train = {
-        'n_iter': 50,
-        'n_burnin': 10,
+        'n_iter': 5,
+        'n_burnin': 1,
     }
 
     # samples from samplers i.e number of samples = number of sampling iterations
@@ -50,7 +51,7 @@ def mdnd(n_clusters, edges):
         'assignments': np.zeros((train['n_iter'], n_edges), dtype=int),
     }
 
-    # the importance beta, as node weights normalized to sum 1
+    # the importance beta in the paper, as node weights normalized to sum 1
     sw = 0
     for e in edges:
         if e[0] not in fixed['node_weights']:
@@ -192,10 +193,15 @@ def mdnd(n_clusters, edges):
             gibbs_step()
             sample['assignments'][i, :] = state['assignments']
 
-            print('train | iter {}, number of clusters {}\n{}'.format(i, state['n_clusters'], state['assignments']))
+            print('train | iter {}, number of clusters {}, cluster indices {}\n{}'.format(i, state['n_clusters'], state['cluster_ids'], state['assignments'], ))
 
             # check if number of clusters is correct
-            assert(state['n_clusters'] == len(set(state['assignments'])))
+            try: state['n_clusters'] == len(set(state['assignments']))
+            except:
+                print('wrong number of clusters')
+                print(state['n_clusters'])
+                print(len(set(state['assignments'])))
+                exit(1)
 
         #     from collections import Counter
         #     if i % 10 == 0:
@@ -208,9 +214,26 @@ def mdnd(n_clusters, edges):
 
     gibbs()
 
+    return state
+
 
 if __name__ == '__main__':
     edges, adj = get_data('sbm')
-    plt.imshow(adj)
+    state =mdnd(10, np.array(edges))
+
+    import networkx as nx
+    g = nx.from_numpy_matrix(np.matrix(adj))
+    # nx.draw(g)
+    # plt.show()
+    pos = nx.spring_layout(g)
+    # nx.draw(g)
+    from collections import Counter
+    mode = Counter(state['cluster_ids']).most_common()[0][0]
+    print(mode)
+    a = edges[state['assignments'] == mode]
+    a = [tuple(b) for b in a]
+    print(a)
+
+    nx.draw_networkx_edges(g, pos, edgelist=a, edge_color='r', alpha=0.5)
     plt.show()
-    mdnd(3, np.array(edges))
+

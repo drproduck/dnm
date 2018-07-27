@@ -3,12 +3,12 @@ from numpy.random import *
 import matplotlib.pyplot as plt
 import numpy as np
 
-K = 3
+K = 5
 M = 20
 
 phi = np.random.randint(1,10,size=K)
 alpha = 1
-beta = 10
+beta = 1000
 
 # cluster parameter
 theta = np.random.beta(alpha,beta,(K,K))
@@ -36,5 +36,5 @@ for i in range(M):
 
 # adj = np.maximum(adj, adj.T)
 f.close()
-plt.imshow(adj)
+plt.spy(adj)
 plt.show()
