@@ -27,11 +27,11 @@ def mdnd(n_clusters, edges):
     }
 
     fixed = {
-        'alpha_D': 1,
+        'alpha_D': 100, # control the number of clusters
+        'tau': 10, # control cluster overlap
+        'gamma_H': 1, # control number of nodes
         'edges': edges,
         'n_edges': n_edges,
-        'gamma_H': 1,
-        'tau': 1,
         # 'node_indices': set(),
         'node_weights': dict(),
 
@@ -41,8 +41,8 @@ def mdnd(n_clusters, edges):
     }
 
     train = {
-        'n_iter': 5,
-        'n_burnin': 1,
+        'n_iter': 50,
+        'n_burnin': 10,
     }
 
     # samples from samplers i.e number of samples = number of sampling iterations
@@ -83,7 +83,9 @@ def mdnd(n_clusters, edges):
         #         res1 += 1
         # assert(sum(res) == res1)
 
-        return sum(res) if not res[ind] else sum(res) - 1
+        # remove edge[ind] if its in inlink
+        res[ind] = False
+        return sum(res)
 
     def get_outlink_size(u, k, ind):
         res = [a and b for a, b in zip(fixed['edges'][:, 0] == u, state['assignments'] == k)]
@@ -95,8 +97,8 @@ def mdnd(n_clusters, edges):
         #     if state['assignments'][i] == k and e[0] == u:
         #         res1 += 1
         # assert(sum(res) == res1)
-
-        return sum(res) if not res[ind] else sum(res) - 1
+        res[ind] = False
+        return sum(res)
 
     def get_prob(cluster, ind):
         u = fixed['edges'][ind][0]
@@ -104,21 +106,23 @@ def mdnd(n_clusters, edges):
 
         # new cluster
         if cluster == -1:
-            return np.log(fixed['alpha_D']) + 2 * np.log(fixed['tau']) + np.log(fixed['node_weights'][u]) + np.log(
-                fixed['node_weights'][v])
+            return np.log(fixed['alpha_D']) + 2 * np.log(fixed['tau']) + np.log(fixed['node_weights'][u]) + np.log(fixed['node_weights'][v])
 
         else:
-            Nk = state['sizes'][cluster] - 1 if state['assignments'][ind] == cluster else state['sizes'][cluster]
+            if state['assignments'][ind] == cluster:
+                Nk = state['sizes'][cluster] - 1
+            else:
+                Nk = state['sizes'][cluster]
+
             Lu = get_outlink_size(u, cluster, ind)
             Lv = get_inlink_size(v, cluster, ind)
 
-            return np.log(Nk) + np.log(Lu + fixed['tau'] * fixed['node_weights'][u]) + np.log(
-                Lv + fixed['tau'] * fixed['node_weights'][v])
+            return np.log(Nk) + np.log(Lu + fixed['tau'] * fixed['node_weights'][u]) + np.log(Lv + fixed['tau'] * fixed['node_weights'][v])
 
     def re_cluster(new_cluster, old_cluster, ind):
         """
         update cluster assignment of edges[ind]
-        including: update cluster sizes, number of clusters, cluster indices
+        including: update cluster sizes, number of clusters
         """
         if new_cluster == old_cluster:
             # same cluster, no update
@@ -155,7 +159,7 @@ def mdnd(n_clusters, edges):
         """sample new cluster assignment"""
 
         old_assignment = state['assignments'][ind]
-        assignment_probs = [get_prob(c, ind) for c in state['cluster_ids'] + [-1]]
+        assignment_probs = [get_prob(c, ind) for c in (state['cluster_ids'] + [-1])]
 
         # to reduce underflow
         assignment_probs = assignment_probs - max(assignment_probs)
@@ -174,7 +178,6 @@ def mdnd(n_clusters, edges):
     def gibbs():
         """main procedure"""
 
-
         print('Dirichlet Process gibbs sampler')
 
         # update and size of each cluster
@@ -183,13 +186,16 @@ def mdnd(n_clusters, edges):
 
         for i in range(train['n_burnin']):
             gibbs_step()
-            print('burn in | iter {} {}\n{}'.format(i, state['n_clusters'], state['assignments']))
+            print('burn in | iter {}, number of clusters {}\n{}'.format(i, state['n_clusters'], state['assignments']))
 
         for i in range(train['n_iter']):
             gibbs_step()
             sample['assignments'][i, :] = state['assignments']
 
-            print('train | iter {} {}\n{}'.format(i, state['n_clusters'], state['assignments']))
+            print('train | iter {}, number of clusters {}\n{}'.format(i, state['n_clusters'], state['assignments']))
+
+            # check if number of clusters is correct
+            assert(state['n_clusters'] == len(set(state['assignments'])))
 
         #     from collections import Counter
         #     if i % 10 == 0:
@@ -207,4 +213,4 @@ if __name__ == '__main__':
     edges, adj = get_data('sbm')
     plt.imshow(adj)
     plt.show()
-    mdnd(10, np.array(edges))
+    mdnd(3, np.array(edges))

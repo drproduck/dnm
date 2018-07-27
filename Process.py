@@ -19,10 +19,6 @@ from scipy.stats import norm
 #     def sample(self):
 #         pass
 #
-#
-# class FakeProcess(Process):
-#     def __init__(self, ap):
-#         pass
 
 
 class RandomVariable():
