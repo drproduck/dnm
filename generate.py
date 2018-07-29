@@ -11,10 +11,15 @@ import matplotlib.pyplot as plt
 # Mixture od Dirichlet network
 # print out 2 images of the random adjacency matrix and graph egdes, colored according to their cluster indicator c
 
+# play with these parameters:
+gamma = 1000 # control number of nodes
+alpha = 1 # control number of clusters
+tau = 5 # control cluster overlap
+
 inlinks = dict()
 outlinks = dict()
-H = DirichletProcessDiscrete(ap=1000) #control number of nodes
-D = DirichletProcessDiscrete(ap=1)# control number of clusters
+H = DirichletProcessDiscrete(ap=gamma) #control number of nodes
+D = DirichletProcessDiscrete(ap=alpha)# control number of clusters
 
 n = 500 # number of edges
 edges = np.zeros((n,2), dtype=int)
@@ -25,11 +30,11 @@ print(cs)
 
 for i,c in enumerate(cs):
     if c not in inlinks.keys():
-        inlinks[c] = DirichletProcess(H,ap=5) # contrl inlink cluster overlap
+        inlinks[c] = DirichletProcess(H,ap=tau) # contrl inlink cluster overlap
     u = inlinks[c].sample()
 
     if c not in outlinks.keys():
-        outlinks[c] = DirichletProcess(H,ap=5) # control outlink cluster voerlap
+        outlinks[c] = DirichletProcess(H,ap=tau) # control outlink cluster voerlap
     v = outlinks[c].sample()
 
     edges[i,:] = [u,v]
