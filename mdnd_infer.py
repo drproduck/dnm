@@ -1,11 +1,15 @@
 import numpy as np
-from numpy.random import choice
+from numpy.random import choice, dirichlet
 import matplotlib.pyplot as plt
 import networkx as nx
+from Process import Antoniak
 
+
+
+# This is the main inference algorith mfor mixture of dirichlet networks
 
 def get_data(fname):
-    """should return an (n,2) array of edges"""
+    """get data edge list from file. should return an (n,2) array of edges"""
     f = open(fname, 'r')
     res = np.array([list(map(int, line.strip().split(' '))) for line in f], dtype=int)
     sz = int(res.flatten().max() + 1)
@@ -18,19 +22,30 @@ def get_data(fname):
 
 
 def mdnd(n_clusters, edges):
+    """main algorithm"""
     n_edges = edges.shape[0]
+
+    node_ids = list(set(edges.flatten())) + [-1] # funny stuff: node is like topic in lda, while lda topics can grow in sampling time nodes dont
+    n_nodes = len(node_ids) - 1
+    antoniak = Antoniak() # antoniak distribution
+    dirich = dirichlet(alpha=np.ones(n_nodes + 1))
+    beta = {node_ids[i]: dirich[i] for i in range(n_nodes + 1)}
+
+    # store variable that will be sampled
     state = {
-        'cluster_ids': [i for i in range(n_clusters)],  # ?
+        'cluster_ids': [i for i in range(n_clusters)],
         'assignments': np.array([choice(n_clusters, replace=True) for _ in range(n_edges)], dtype=int),
         # the cluster assignment of each edge
         'n_clusters': n_clusters,
-        'sizes': {s: 0 for s in range(n_clusters)}  # size of each cluster
+        'sizes': {s: 0 for s in range(n_clusters)},  # size of each cluster
+        'beta': beta
     }
 
+    # store hyperparameters (unchanged)
     fixed = {
         'alpha_D': 10, # control the number of clusters
-        'tau': 5, # control cluster overlap
-        'gamma_H': 5, # control number of nodes
+        'tau': 10, # control cluster overlap
+        'gamma_H': 10, # control number of nodes
         'edges': edges,
         'n_edges': n_edges,
         # 'node_indices': set(),
@@ -41,9 +56,10 @@ def mdnd(n_clusters, edges):
         'outlinks': dict()
     }
 
+    # train parameters
     train = {
-        'n_iter': 5,
-        'n_burnin': 1,
+        'n_iter': 20,
+        'n_burnin': 0,
     }
 
     # samples from samplers i.e number of samples = number of sampling iterations
@@ -51,27 +67,8 @@ def mdnd(n_clusters, edges):
         'assignments': np.zeros((train['n_iter'], n_edges), dtype=int),
     }
 
-    # the importance beta in the paper, as node weights normalized to sum 1
-    sw = 0
-    for e in edges:
-        if e[0] not in fixed['node_weights']:
-            fixed['node_weights'][e[0]] = 1
-        else:
-            fixed['node_weights'][e[0]] += 1
-        sw += 1
-
-        if e[1] != e[0]:  # avoid double count self-edge
-            sw += 1
-            if e[1] not in fixed['node_weights']:
-                fixed['node_weights'][e[1]] = 1
-            else:
-                fixed['node_weights'][e[1]] += 1
-
-    # normalize
-    for k in fixed['node_weights'].keys():
-        fixed['node_weights'][k] /= sw
-
     # TODO: collect inlinks and outlinks (updatable), currently look through edges at each step (slow)
+
     def get_inlink_size(v, k, ind):
         """return: # inlinks of v associated with cluster k"""
         res = [a and b for a, b in zip(fixed['edges'][:, 1] == v, state['assignments'] == k)]
@@ -85,6 +82,7 @@ def mdnd(n_clusters, edges):
         # assert(sum(res) == res1)
 
         # remove edge[ind] if its in inlink
+        if ind == -1: return sum(res)
         res[ind] = False
         return sum(res)
 
@@ -98,16 +96,71 @@ def mdnd(n_clusters, edges):
         #     if state['assignments'][i] == k and e[0] == u:
         #         res1 += 1
         # assert(sum(res) == res1)
+        if ind == -1: return sum(res)
         res[ind] = False
         return sum(res)
 
-    def get_prob(cluster, ind):
+    def sample_outlink_size(u):
+        """
+        step 7 of update_network_model
+        compute \sum_k ro_i.^k
+        """
+        ro_sum_k = 0
+        for c in state['cluster_ids']:
+            Lu = get_outlink_size(u, c, -1)
+            # if u == 19:
+            #     print('19: outlink size {} ,cluster {}'.format(Lu, c))
+            #     print(state['assignments'])
+            if Lu > 1:
+                alpha = fixed['tau'] * state['beta'][u]
+                ro = antoniak.sample(alpha=alpha, n=Lu)
+                ro_sum_k += ro
+            else:
+                ro_sum_k += Lu
+        return ro_sum_k
+
+    def sample_inlink_size(v):
+        """
+        step 7 of update_network_model
+        compute \sum_k ro_.i^k
+        """
+        ro_sum_k = 0
+        for c in state['cluster_ids']:
+            Lv = get_outlink_size(v, c, -1)
+            # if v == 19:
+            #     print('19: inlink size {}, cluster {}'.format(Lv, c))
+            #     print(state['assignments'])
+            if Lv > 1:
+                alpha = fixed['tau'] * state['beta'][v]
+                ro = antoniak.sample(alpha=alpha, n=Lv)
+                ro_sum_k += ro
+            else:
+                ro_sum_k += Lv
+        return ro_sum_k
+
+    def sample_node_prob():
+        """step 8 of update_network_model, sample new node probability beta"""
+        ro = []
+        for node in node_ids:
+            if node == -1: continue
+            ro.append(sample_outlink_size(node) + sample_inlink_size(node))
+
+        # print(ro)
+        ro.append(fixed['gamma_H'])
+        beta = dirichlet(alpha=ro)
+
+        for i,node in enumerate(node_ids):
+            state['beta'][node] = beta[i]
+
+
+    def get_assignment_prob(cluster, ind):
+        """step 5 of update_network_model"""
         u = fixed['edges'][ind][0]
         v = fixed['edges'][ind][1]
 
         # new cluster
         if cluster == -1:
-            return np.log(fixed['alpha_D']) + 2 * np.log(fixed['tau']) + np.log(fixed['node_weights'][u]) + np.log(fixed['node_weights'][v])
+            return np.log(fixed['alpha_D']) + 2 * np.log(fixed['tau']) + np.log(state['beta'][u]) + np.log(state['beta'][v])
 
         else:
             if state['assignments'][ind] == cluster:
@@ -118,7 +171,7 @@ def mdnd(n_clusters, edges):
             Lu = get_outlink_size(u, cluster, ind)
             Lv = get_inlink_size(v, cluster, ind)
 
-            return np.log(Nk) + np.log(Lu + fixed['tau'] * fixed['node_weights'][u]) + np.log(Lv + fixed['tau'] * fixed['node_weights'][v])
+            return np.log(Nk) + np.log(Lu + fixed['tau'] * state['beta'][u]) + np.log(Lv + fixed['tau'] * state['beta'][v])
 
     def re_cluster(new_cluster, old_cluster, ind):
         """
@@ -156,11 +209,14 @@ def mdnd(n_clusters, edges):
             state['sizes'].pop(old_cluster, None)
             state['cluster_ids'].remove(old_cluster)
 
-    def assignment_posterior(ind):
-        """sample new cluster assignment"""
+    def sample_assignment(ind):
+        """
+        step 5
+        sample new cluster assignment
+        """
 
         old_assignment = state['assignments'][ind]
-        assignment_probs = [get_prob(c, ind) for c in (state['cluster_ids'] + [-1])]
+        assignment_probs = [get_assignment_prob(c, ind) for c in (state['cluster_ids'] + [-1])]
 
         # to reduce underflow
         assignment_probs = assignment_probs - max(assignment_probs)
@@ -170,11 +226,13 @@ def mdnd(n_clusters, edges):
 
         re_cluster(new_assignment, old_assignment, ind)
 
+
     def gibbs_step():
         """1 step of Gibbs, sample for each edge randomly."""
 
         for ind in np.random.permutation(n_edges):
-            assignment_posterior(ind)
+            sample_assignment(ind) # sample c
+            sample_node_prob() # sample beta
 
     def gibbs():
         """main procedure"""
@@ -194,6 +252,7 @@ def mdnd(n_clusters, edges):
             sample['assignments'][i, :] = state['assignments']
 
             print('train | iter {}, number of clusters {}, cluster indices {}\n{}'.format(i, state['n_clusters'], state['cluster_ids'], state['assignments'], ))
+            print('beta',state['beta'])
 
             # check if number of clusters is correct
             try: state['n_clusters'] == len(set(state['assignments']))
@@ -203,14 +262,15 @@ def mdnd(n_clusters, edges):
                 print(len(set(state['assignments'])))
                 exit(1)
 
-        #     from collections import Counter
-        #     if i % 10 == 0:
-        #         plt.clf()
-        #         argmax = [Counter(sample['assignments'][:i + 1, j].tolist()).most_common(1)[0][0] for j in range(n_data)]
-        #         plt.scatter(data, y=[0] * len(data), c=argmax, s=10, cmap='gist_rainbow')
-        #         plt.pause(0.05)
-        #
-        # plt.show()
+            from collections import Counter
+            plt.clf()
+            adj = np.zeros((n_nodes, n_nodes), dtype=int)
+            for e,c in zip(edges, state['assignments']):
+                adj[e[0], e[1]] = c
+            plt.imshow(adj)
+            plt.pause(1)
+
+        plt.show()
 
     gibbs()
 

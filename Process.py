@@ -183,7 +183,58 @@ class HierarchicalDirichletProcess():
         return self.DP.sample()
 
 
+
+
+class Antoniak():
+    """Antoniak Distribution with a cache for lazy evaluating stirling numbers"""
+
+    def __init__(self):
+        self.cache = [] # cache
+        self.maxnn = 1
+
+    def stirling(self,nn): # making an array for keep the stirling(N,1:N) for saving time consumming
+        if len(self.cache)==0:
+            self.cache.append([])
+            self.cache[0].append(1)
+        if nn > self.maxnn:
+            for mm in range (self.maxnn,nn):
+                ln=len(self.cache[mm-1])+1
+                self.cache.append([])
+
+                for xx in range(ln) :
+                    self.cache[mm].append(0)
+                    if xx< (ln-1):
+                        self.cache[mm][xx] += self.cache[mm-1][xx]*mm
+                    if xx>(ln-2) :
+                        self.cache[mm][xx] += 0
+                    if xx==0 :
+                        self.cache[mm][xx] += 0
+                    if xx!=0 :
+                        self.cache[mm][xx] += self.cache[mm-1][xx-1]
+
+            self.maxnn=nn
+        return self.cache[nn-1]
+
+    def sample(self, alpha, n):
+        ss = self.stirling(n)
+        max_val = max(ss)
+        p = np.array(ss) / max_val
+
+        aa = 1
+        for i, _ in enumerate(p):
+            p[i] *= aa
+            aa *= alpha
+
+            p = np.array(p,dtype='float') / np.array(p,dtype='float').sum()
+            return choice(range(1, n+1), p=p)
+
+
 if __name__ == '__main__':
-    A = StickBreakingProcess(ap=1)
-    B = DirichletProcess(base=A, ap=1)
-    print(B.sample())
+    # A = StickBreakingProcess(ap=1)
+    # B = DirichletProcess(base=A, ap=1)
+    # print(B.sample())
+
+    a = Antoniak()
+    print(a.stirling(3))
+    print(a.sample(alpha=0.2, n=10))
+    # print(a.cache)

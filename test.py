@@ -6,35 +6,30 @@ from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.mlab as mlab
 from Process import *
 import matplotlib.pyplot as plt
-# stick = StickBreakingProcess(alpha=100)
-# sample = stick.sample(1000)
-# plt.hist(sample, bins=100)
-# plt.show()
 
-# g = Gaussian(1,2)
-# hdp = HierarchicalDirichletProcess(10,10,g)
-# plt.hist([hdp.sample() for i in range(1000)],bins=100)
-# plt.show()
 
 # Mixture od Dirichlet network
+# print out 2 images of the random adjacency matrix and graph egdes, colored according to their cluster indicator c
 
 inlinks = dict()
 outlinks = dict()
-H = DirichletProcessDiscrete(ap=100)
-D = DirichletProcessDiscrete(ap=10)
+H = DirichletProcessDiscrete(ap=1000) #control number of nodes
+D = DirichletProcessDiscrete(ap=1)# control number of clusters
 
-n = 1000 # number of edges
+n = 500 # number of edges
 edges = np.zeros((n,2), dtype=int)
+
+# cluster indicators are sorted so that adjacency matrix has blocks
 cs = sorted([D.sample() for _ in range(n)])
 print(cs)
 
 for i,c in enumerate(cs):
     if c not in inlinks.keys():
-        inlinks[c] = DirichletProcess(H,ap=5)
+        inlinks[c] = DirichletProcess(H,ap=5) # contrl inlink cluster overlap
     u = inlinks[c].sample()
 
     if c not in outlinks.keys():
-        outlinks[c] = DirichletProcess(H,ap=5)
+        outlinks[c] = DirichletProcess(H,ap=5) # control outlink cluster voerlap
     v = outlinks[c].sample()
 
     edges[i,:] = [u,v]
@@ -42,22 +37,39 @@ for i,c in enumerate(cs):
 sz0 = max(edges[:,0])
 sz1 = max(edges[:,1])
 sz = max(sz0, sz1) + 1
-print(edges)
 adj = np.zeros((sz, sz), dtype=int)
-for i in range(n):
-    adj[edges[i,0], edges[i,1]] += 1
-print(adj)
-# plt.imshow(adj,cmap='gist_rainbow')
-# plt.spy(adj)
+mc = max(cs) # max of cs
 
-
-# a = DirichletProcessDiscrete(ap=10)
-# plt.hist([a.sample() for _ in range(1000)], bins=100)
-# plt.show()
+i = 0
+while i < len(edges):
+    if adj[edges[i,0], edges[i,1]] > 0:
+        del cs[i]
+        edges = np.delete(edges, i, 0)
+    else:
+        adj[edges[i,0], edges[i,1]] = mc - cs[i]
+        i+=1
 
 import networkx as nx
+plt.figure(1)
 adj = np.matrix(adj)
-G = nx.from_numpy_matrix(adj)
-nx.draw(G)
-plt.show()
+G = nx.from_edgelist(edges)
 
+# print(len(edges))
+# print(len(G.edges), G.edges)
+# print(len(cs),cs)
+edge_tuple = []
+for i in range(len(edges)):
+    edge_tuple.append(tuple(edges[i,:]))
+print(edge_tuple)
+
+pos = nx.spring_layout(G, 2)
+nx.draw_networkx_edges(G, pos, edgelist=edge_tuple, edge_color=cs)
+nx.draw_networkx_nodes(G, pos, node_size=1)
+plt.xlim(-1, 1)
+plt.ylim(-1, 1)
+print(edges)
+
+# get the adj matrix
+plt.figure(2)
+plt.imshow(adj)
+plt.show()
