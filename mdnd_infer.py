@@ -279,7 +279,7 @@ def mdnd(n_clusters, edges):
 
 if __name__ == '__main__':
     edges, adj = get_data('sbm')
-    state =mdnd(10, np.array(edges))
+    state =mdnd(len(edges), np.array(edges))
 
     import networkx as nx
     g = nx.from_numpy_matrix(np.matrix(adj))

@@ -21,13 +21,13 @@ outlinks = dict()
 H = DirichletProcessDiscrete(ap=gamma) #control number of nodes
 D = DirichletProcessDiscrete(ap=alpha)# control number of clusters
 
-n = 500 # number of edges
+n = 1000 # number of edges
 edges = np.zeros((n,2), dtype=int)
 
 # cluster indicators are sorted so that adjacency matrix has blocks
 cs = sorted([D.sample() for _ in range(n)])
 print(cs)
-
+import copy
 for i,c in enumerate(cs):
     if c not in inlinks.keys():
         inlinks[c] = DirichletProcess(H,ap=tau) # contrl inlink cluster overlap

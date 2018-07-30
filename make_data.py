@@ -4,11 +4,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 K = 5
-M = 20
+M = 10
 
 phi = np.random.randint(1,10,size=K)
 alpha = 1
-beta = 1000
+beta = 100
 
 # cluster parameter
 theta = np.random.beta(alpha,beta,(K,K))
