@@ -43,9 +43,9 @@ def mdnd(n_clusters, edges):
 
     # store hyperparameters (unchanged)
     fixed = {
-        'alpha_D': 10, # control the number of clusters
-        'tau': 10, # control cluster overlap
-        'gamma_H': 10, # control number of nodes
+        'alpha_D': 1, # control the number of clusters
+        'tau': 5, # control cluster overlap
+        'gamma_H': 1000, # control number of nodes
         'edges': edges,
         'n_edges': n_edges,
         # 'node_indices': set(),
@@ -145,7 +145,7 @@ def mdnd(n_clusters, edges):
             if node == -1: continue
             ro.append(sample_outlink_size(node) + sample_inlink_size(node))
 
-        # print(ro)
+        print(ro)
         ro.append(fixed['gamma_H'])
         beta = dirichlet(alpha=ro)
 
@@ -278,8 +278,8 @@ def mdnd(n_clusters, edges):
 
 
 if __name__ == '__main__':
-    edges, adj = get_data('sbm')
-    state =mdnd(len(edges), np.array(edges))
+    edges, adj = get_data('mdnd')
+    state =mdnd(5, np.array(edges))
 
     import networkx as nx
     g = nx.from_numpy_matrix(np.matrix(adj))

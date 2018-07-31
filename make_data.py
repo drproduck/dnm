@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 K = 5
-M = 10
+M = 30
 
 phi = np.random.randint(1,10,size=K)
 alpha = 1

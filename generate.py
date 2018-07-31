@@ -21,7 +21,7 @@ outlinks = dict()
 H = DirichletProcessDiscrete(ap=gamma) #control number of nodes
 D = DirichletProcessDiscrete(ap=alpha)# control number of clusters
 
-n = 1000 # number of edges
+n = 100 # number of edges
 edges = np.zeros((n,2), dtype=int)
 
 # cluster indicators are sorted so that adjacency matrix has blocks
@@ -43,7 +43,7 @@ sz0 = max(edges[:,0])
 sz1 = max(edges[:,1])
 sz = max(sz0, sz1) + 1
 adj = np.zeros((sz, sz), dtype=int)
-mc = max(cs) # max of cs
+mc = max(cs) + 1 # max of cs
 
 i = 0
 while i < len(edges):
@@ -73,7 +73,9 @@ nx.draw_networkx_nodes(G, pos, node_size=1)
 plt.xlim(-1, 1)
 plt.ylim(-1, 1)
 print(edges)
-
+f = open('mdnd','w')
+for e in edges:
+    f.write('{} {}\n'.format(e[0], e[1]))
 # get the adj matrix
 plt.figure(2)
 plt.imshow(adj)
