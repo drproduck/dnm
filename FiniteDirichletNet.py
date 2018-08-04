@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from Process import Antoniak
 from collections import Counter
-
+import copy
 
 # This is the main inference algorith mfor mixture of dirichlet networks
 
@@ -13,36 +13,19 @@ def get_data(fname):
     """get data edge list from file. should return an (n,2) array of edges"""
     f = open(fname, 'r')
     res = np.array([list(map(int, line.strip().split(' '))) for line in f], dtype=int)
+    nodes = list(set(res.flatten()))
     sz = int(res.flatten().max() + 1)
     adj = np.zeros((sz, sz), dtype=int)
 
     for e in res:
         adj[e[0], e[1]] += 1
 
-    return res, adj
+    return res, nodes, adj
 
 
-def mdnd(n_clusters, edges):
-    """main algorithm"""
+def FiniteDirichetnet(n_clusters, edges, nodes):
+    """replace HDP with mixture of Dirichlet-Categorical"""
     n_edges = edges.shape[0]
-
-    # set up some layout for graph plot
-    edge_tuple = []
-    for i in range(len(edges)):
-        edge_tuple.append(tuple(edges[i, :]))
-
-    G = nx.from_edgelist(edges)
-    pos = nx.spring_layout(G, 2)
-    pos[0] = np.array([0,0])
-    pos[2] = np.array([1,0])
-    pos[1] = np.array([0.5,1])
-    pos[6] = np.array([0.5,2])
-    pos[7] = np.array([0.5,3])
-    pos[8] = np.array([0.5,4])
-    pos[3] = np.array([0.5,5])
-    pos[4] = np.array([0,6])
-    pos[5] = np.array([1,6])
-
 
     # store variable that will be sampled
     state = {
@@ -51,125 +34,99 @@ def mdnd(n_clusters, edges):
         # the cluster assignment of each edge
         'n_clusters': n_clusters,
         'sizes': {s: 0 for s in range(n_clusters)},  # size of each cluster
-        'beta': None # set later
+        'beta': None, # set later
+
+        'in_cluster_sizes': None,
+        'out_cluster_sizes': None,
     }
 
     # store hyperparameters (unchanged)
     fixed = {
         'alpha_D': 1, # control the number of clusters
-        'tau': 1, # control cluster overlap
-        'gamma_H': 1, # control number of nodes
+        'gamma': np.array([0.1]*len(nodes), dtype=float), # Dirichlet prior
         'edges': edges,
         'n_edges': n_edges,
+        'n_nodes': len(nodes),
         'node_ids': None,
-        'node_cardinals': None,
-        'node_weights': dict(),
-
-        # update these, else very slow
-        'inlinks': dict(),
-        'outlinks': dict()
     }
+
+    state['in_cluster_sizes'] = {state['cluster_ids'][i]: np.zeros(fixed['n_nodes']) for i in range(state['n_clusters'])}
+    state['out_cluster_sizes'] = {state['cluster_ids'][i]: np.zeros(fixed['n_nodes']) for i in range(state['n_clusters'])}
+    for i,c in enumerate(state['assignments']):
+        u = edges[i,0]
+        v = edges[i,1]
+        state['in_cluster_sizes'][c][v] += 1
+        state['out_cluster_sizes'][c][u] += 1
+
+    # update size of each cluster
+    for i, c in enumerate(state['assignments']):
+        state['sizes'][c] += 1
 
     # train parameters
     train = {
         'n_iter': 1000,
-        'n_burnin': 100,
+        'n_burnin': 10,
     }
 
     # samples from samplers i.e number of samples = number of sampling iterations
     sample = {
         'assignments': np.zeros((train['n_iter'], n_edges), dtype=int),
-        'beta': None
     }
 
-    # collect node ids, number of node_id and save
-    node_cardinals = Counter(list(edges.flatten()))
-    n_nodes = len(node_cardinals) # note counting latent weight
-    node_cardinals[-1] = fixed['gamma_H'] # this is the latent weight gamma
-    fixed['node_cardinals'] = node_cardinals
+    def x_posterior_predictive(k, ind):
+        """
+        sample from posterior distribution of in_cluster/out_cluster categorical
+        use dirichlet-categorical posterior predictive / collapsed out the categorical distribution
+        """
+        u = fixed['edges'][ind,0]
+        v = fixed['edges'][ind,1]
+        #in_cluster
+        in_cluster_k = copy.deepcopy(state['in_cluster_sizes'][k])
+        if state['assignments'][ind] == k:
+            in_cluster_k[v] -= 1
+        assert(in_cluster_k[v] >= 0)
+        in_posterior_count = fixed['gamma'] + in_cluster_k
+        in_prob = in_posterior_count[v] / sum(in_posterior_count)
 
-    # 1 sample of beta and save
-    dirich = dirichlet(alpha=[i for i in node_cardinals.values()])
-    fixed['node_ids'] = [i for i in node_cardinals.keys()] # save node_ids here so that it includes -1 and aligns with node_cardinal_values
-    state['beta'] = {fixed['node_ids'][i]: dirich[i] for i in range(n_nodes + 1)}
-    sample['beta'] = np.zeros((train['n_iter'], n_nodes+1), dtype=np.float)
+        #out_cluster
+        out_cluster_k = copy.deepcopy(state['out_cluster_sizes'][k])
+        if state['assignments'][ind] == k:
+            out_cluster_k[u] -= 1
+        assert(out_cluster_k[u] >= 0)
+        out_posterior_count = fixed['gamma'] + out_cluster_k
+        out_prob = out_posterior_count[u] / sum(out_posterior_count)
+        return in_prob, out_prob
 
-
-    def get_outlink_size_in_cluster(u, k):
-        """:return: # size of outlink node u in cluster k"""
-
-        res = [a and b for a, b in zip(fixed['edges'][:,0] == u, state['assignments'] == k)]
-
-        return sum(res)
-
-    def get_inlink_size_in_cluster(v, k):
-        """:return: # size of inlink node v in cluster k"""
-
-        res = [a and b for a, b in zip(fixed['edges'][:, 1] == v, state['assignments'] == k)]
-
-        return sum(res)
-
-
-    def sample_node_prob():
-        """sample new node probability beta, THIS IS EXPERIMENTAL"""
-
-        dirich = dirichlet(alpha=[i for i in node_cardinals.values()])
-        state['beta'] = {fixed['node_ids'][i]: dirich[i] for i in range(n_nodes + 1)}
-        return state['beta']
+    def c_old_posterior(k, ind):
+        """
+        :param k: the cluster index
+        :param ind: the index of current edge
+        :return: p(c_n=k|c^{-n}). proportional to N
+        """
+        if state['assignments'][ind] == k:
+            N = state['sizes'][k] - 1
+        else: N = state['sizes'][k]
+        return N
 
     def get_assignment_prob(cluster, ind):
-        """sample from assignment conditional"""
+        """
+        sample from assignment conditional posterior
+        p(c_n=k|u_n,v_n,c^{-n}) = p(u_n|c_n=k)p(v_n|c_n=k)p(c_n=k|c^{-n})
+        """
 
         u = fixed['edges'][ind][0]
         v = fixed['edges'][ind][1]
 
-        # new cluster
+        # k = new
         if cluster == -1:
-            return np.log(fixed['alpha_D']) + np.log(state['beta'][u]) + np.log(state['beta'][v])
-
+            # sample a new posterior categorical for new cluster
+            p_u_given_c = fixed['gamma'][u] / sum(fixed['gamma'])
+            p_v_given_c = fixed['gamma'][v] / sum(fixed['gamma'])
+            p_c_given_other_cs = fixed['alpha_D']
         else:
-
-            # size of this cluster except this edge is necessary
-            if state['assignments'][ind] == cluster:
-                Nk = state['sizes'][cluster] - 1
-            else:
-                Nk = state['sizes'][cluster]
-
-            # this one is tricky ...
-            Lu = get_outlink_size_in_cluster(u, cluster)
-            # if u has been seen in this cluster A_k before
-            if Lu > 0:
-                # discount
-                if state['assignments'][ind] == cluster:
-                    wu = (Lu - 1) / (Nk + fixed['tau'])
-                    # wu = Lu - 1
-                else:
-                    wu = Lu / (Nk + fixed['tau'])
-                    # wu = Lu
-                # if Lu = 1 then better go to another cluster ...
-            else:
-                # if u has not been seen
-                wu = fixed['tau'] / (Nk + fixed['tau']) * state['beta'][u]
-                # wu = fixed['tau'] * state['beta'][u]
-
-            # similarly for v
-            Lv = get_inlink_size_in_cluster(v, cluster)
-            # if v has been seen in this cluster B_k before
-            if Lv > 0:
-                # discount
-                if state['assignments'][ind] == cluster:
-                    wv = (Lv - 1) / (Nk + fixed['tau'])
-                    # wv = Lv - 1
-                else:
-                    wv = Lv / (Nk + fixed['tau'])
-                    # wv = Lv
-                # if Lv = 1 then better go to another cluster ...
-            else:
-                # if v has not been seen
-                wv = fixed['tau'] / (Nk + fixed['tau']) * state['beta'][v]
-                # wv = fixed['tau'] * state['beta'][v]
-
-            return np.log(Nk) + np.log(wu) + np.log(wv)
+            p_u_given_c, p_v_given_c = x_posterior_predictive(cluster, ind)
+            p_c_given_other_cs = c_old_posterior(cluster, ind)
+        return np.log(p_u_given_c) + np.log(p_v_given_c) + np.log(p_c_given_other_cs)
 
     def re_cluster(new_cluster, old_cluster, ind):
         """
@@ -179,6 +136,9 @@ def mdnd(n_clusters, edges):
         if new_cluster == old_cluster:
             # same cluster, no update
             return
+
+        u = fixed['edges'][ind,0]
+        v = fixed['edges'][ind,1]
 
         if new_cluster == -1:
             state['n_clusters'] += 1
@@ -198,6 +158,13 @@ def mdnd(n_clusters, edges):
             state['sizes'][new_cluster] = 1
             state['sizes'][old_cluster] -= 1
 
+            state['in_cluster_sizes'][new_cluster] = np.zeros(fixed['n_nodes'])
+            state['in_cluster_sizes'][new_cluster][v] += 1
+            state['out_cluster_sizes'][new_cluster] = np.zeros(fixed['n_nodes'])
+            state['out_cluster_sizes'][new_cluster][u] += 1
+            state['in_cluster_sizes'][old_cluster][v] -= 1
+            state['out_cluster_sizes'][old_cluster][u] -= 1
+
         else:
             # update
             state['assignments'][ind] = new_cluster
@@ -205,6 +172,10 @@ def mdnd(n_clusters, edges):
             # update size
             state['sizes'][new_cluster] += 1
             state['sizes'][old_cluster] -= 1
+            state['in_cluster_sizes'][new_cluster][v] += 1
+            state['in_cluster_sizes'][old_cluster][v] -= 1
+            state['out_cluster_sizes'][new_cluster][u] += 1
+            state['out_cluster_sizes'][old_cluster][u] -= 1
 
         # check if cluster needs prune
         if state['sizes'][old_cluster] == 0:
@@ -213,6 +184,8 @@ def mdnd(n_clusters, edges):
 
             state['sizes'].pop(old_cluster, None)
             state['cluster_ids'].remove(old_cluster)
+            state['in_cluster_sizes'].pop(old_cluster, None)
+            state['out_cluster_sizes'].pop(old_cluster, None)
 
     def sample_assignment(ind):
         """
@@ -239,16 +212,11 @@ def mdnd(n_clusters, edges):
 
         for ind in np.random.permutation(n_edges):
             sample_assignment(ind) # sample c
-            sample_node_prob() # sample beta
 
     def gibbs():
         """main procedure"""
 
         print('Dirichlet Process gibbs sampler')
-
-        # update and size of each cluster
-        for i, c in enumerate(state['assignments']):
-            state['sizes'][c] += 1
 
         for i in range(train['n_burnin']):
             gibbs_step()
@@ -257,7 +225,6 @@ def mdnd(n_clusters, edges):
         for i in range(train['n_iter']):
             gibbs_step()
             sample['assignments'][i, :] = state['assignments']
-            sample['beta'][i, :] = [i for i in state['beta'].values()]
 
             print('train | iter {}, number of clusters {}, cluster indices {}\n{}'.format(i, state['n_clusters'], state['cluster_ids'], state['assignments'], ))
             # print('beta',state['beta'])
@@ -272,13 +239,10 @@ def mdnd(n_clusters, edges):
 
             plt.clf()
             plt.subplot(121)
-            # cm = plt.get_cmap('gist_rainbow')
-            # cNorm = colors.Normalize(vmin=0, vmax=NUM_COLORS - 1)
-            # scalarMap = mplcm.ScalarMappable(norm=cNorm, cmap=cm)
-            # color map
-            # cmap = colors.ListedColormap(['white', 'red', 'green', 'blue','yellow'])
-            # bounds = [0,1,2,3,4]
-            # norm = colors.BoundaryNorm(bounds, cmap.N)
+
+            cmap = colors.ListedColormap(['white', 'red', 'green', 'blue','yellow'])
+            bounds = [0,1,2,3,4,5]
+            norm = colors.BoundaryNorm(bounds, cmap.N)
             #
             # nx.draw_networkx_nodes(G, pos, node_size=1)
             # nx.draw_networkx_edges(G, pos, edgelist=edge_tuple, edge_color=state['assignments'])
@@ -288,24 +252,19 @@ def mdnd(n_clusters, edges):
             # adj = np.zeros((n_nodes, n_nodes), dtype=int)
 
             # color the 3 biggest clusters + 1 color for the rest
-            # count = Counter(state['assignments'])
-            # count = [i for i in count.keys()]
-            # count = sorted(set(state['assignments']))
-            # print(count)
-            # temp = [1,2,3,4]
-            # color = {count[x]: temp[x] if x < 3 else temp[3] for x in range(len(count))}
-            # for e,c in zip(edges, state['assignments']):
-            #     adj[e[0], e[1]] = color[c]
-            # plt.imshow(adj, cmap=cmap, norm=norm)
+            count = Counter(state['assignments']).most_common()
+            print(count)
+            count = [c[0] for c in count]
+            print(count)
+            temp = [1,2,3,4,5]
+            color = {count[x]: temp[x] if x < 3 else temp[3] for x in range(len(count))}
+            for e,c in zip(edges, state['assignments']):
+                adj[e[0], e[1]] = color[c]
+            plt.imshow(adj,cmap=cmap,norm=norm)
 
-            # for n,e in enumerate(edges):
-            #     adj[e[0],e[1]] = state['assignments'][n] + 5
-            #
-            # plt.imshow(adj)
-            #
-            # plt.pause(1)
+            plt.pause(1)
 
-        # plt.show()
+        plt.show()
 
     gibbs()
 
@@ -313,9 +272,9 @@ def mdnd(n_clusters, edges):
 
 
 if __name__ == '__main__':
-    edges, adj = get_data('bell')
+    edges, nodes, adj = get_data('sbm')
     n_edges = len(edges)
-    state,sample,train = mdnd(2, np.array(edges))
+    state,sample,train = FiniteDirichetnet(2, np.array(edges), np.array(nodes))
     sim = np.zeros([n_edges, n_edges], dtype=int)
     for i in range(n_edges):
         for j in range(n_edges):
@@ -330,5 +289,4 @@ if __name__ == '__main__':
         top[i][:3] = a[-3:]
     print(top)
     plt.show()
-
 

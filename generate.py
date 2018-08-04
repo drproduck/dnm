@@ -21,7 +21,7 @@ outlinks = dict()
 H = DirichletProcessDiscrete(ap=gamma) #control number of nodes
 D = DirichletProcessDiscrete(ap=alpha)# control number of clusters
 
-n = 100 # number of edges
+n = 200 # number of edges
 edges = np.zeros((n,2), dtype=int)
 
 # cluster indicators are sorted so that adjacency matrix has blocks
