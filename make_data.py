@@ -3,11 +3,11 @@ from numpy.random import *
 import matplotlib.pyplot as plt
 import numpy as np
 
-K = 5
-M = 40
+K = 7
+M = 70
 
 # phi = np.random.randint(1,10,size=K)
-phi = np.array([4]*K,dtype=float)
+phi = np.array([10]*K,dtype=float)
 alpha = 1
 beta = 10
 

@@ -23,7 +23,7 @@ def get_data(fname):
     return res, nodes, adj
 
 
-def FiniteDirichetnet(n_clusters, edges, nodes):
+def FiniteNodeInfiniteClusterDirichletNet(n_clusters, edges, nodes):
     """replace HDP with mixture of Dirichlet-Categorical"""
     n_edges = edges.shape[0]
 
@@ -238,10 +238,9 @@ def FiniteDirichetnet(n_clusters, edges, nodes):
                 exit(1)
 
             plt.clf()
-            plt.subplot(121)
 
-            cmap = colors.ListedColormap(['white', 'red', 'green', 'blue','yellow'])
-            bounds = [0,1,2,3,4,5]
+            cmap = colors.ListedColormap(['white', 'red', 'green', 'blue','yellow','purple','orange','brown','black'])
+            bounds = [0,1,2,3,4,5,6,7,8,9]
             norm = colors.BoundaryNorm(bounds, cmap.N)
             #
             # nx.draw_networkx_nodes(G, pos, node_size=1)
@@ -253,11 +252,9 @@ def FiniteDirichetnet(n_clusters, edges, nodes):
 
             # color the 3 biggest clusters + 1 color for the rest
             count = Counter(state['assignments']).most_common()
-            print(count)
             count = [c[0] for c in count]
-            print(count)
-            temp = [1,2,3,4,5]
-            color = {count[x]: temp[x] if x < 3 else temp[3] for x in range(len(count))}
+            temp = [1,2,3,4,5,6,7,8,9]
+            color = {count[x]: temp[x] if x < 8 else temp[8] for x in range(len(count))}
             for e,c in zip(edges, state['assignments']):
                 adj[e[0], e[1]] = color[c]
             plt.imshow(adj,cmap=cmap,norm=norm)
@@ -274,7 +271,7 @@ def FiniteDirichetnet(n_clusters, edges, nodes):
 if __name__ == '__main__':
     edges, nodes, adj = get_data('sbm')
     n_edges = len(edges)
-    state,sample,train = FiniteDirichetnet(2, np.array(edges), np.array(nodes))
+    state,sample,train = FiniteNodeInfiniteClusterDirichletNet(2, np.array(edges), np.array(nodes))
     sim = np.zeros([n_edges, n_edges], dtype=int)
     for i in range(n_edges):
         for j in range(n_edges):
