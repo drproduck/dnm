@@ -43,7 +43,7 @@ def viDirichletMix(n_clusters, edges, nodes):
         'n_clusters': n_clusters,
         'pi': np.array([1]*n_clusters, dtype=float), # dirichlet prior for mixture weight
         'gamma': np.array([0.1]*len(nodes), dtype=float), # Dirichlet prior for node cluster weight
-        'kappa': 0.9, # robbins-monro
+        'kappa': 0.7, # robbins-monro
         'edges': edges,
         'n_edges': n_edges,
         'n_nodes': len(nodes),
@@ -243,7 +243,7 @@ def viDirichletMix(n_clusters, edges, nodes):
 
     # vi_train()
 
-    vi_train_stochastic(1, locally_collapsed=True)
+    vi_train_stochastic(100, locally_collapsed=True)
     get_local_estimate()
 
     return state,vi

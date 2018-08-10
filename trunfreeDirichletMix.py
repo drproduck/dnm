@@ -23,7 +23,7 @@ def get_data(fname):
     return res, nodes, adj
 
 
-def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, nodes):
+def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, edges_test):
     """replace HDP with mixture of Dirichlet-Categorical"""
     n_edges = edges.shape[0]
     n_nodes = len(nodes)
@@ -40,7 +40,7 @@ def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, nodes):
     # store hyperparameters (unchanged)
     fixed = {
         'alpha': 1.0, # Beta prior for stick breaking ~ Beta(1, \alpha)
-        'gamma': np.array([1]*len(nodes), dtype=float), # Dirichlet prior for node cluster weight  \theta ~ Dir(\gamma)
+        'gamma': np.array([0.1]*len(nodes), dtype=float), # Dirichlet prior for node cluster weight  \theta ~ Dir(\gamma)
         'edges': edges,
         'n_edges': n_edges,
         'n_nodes': len(nodes),
@@ -62,6 +62,7 @@ def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, nodes):
         'n_validate': 200,
         'batch_size': 100,
         'n_sample': 100,
+        'eps': 0.001 # new cluster threshold
     }
 
     # def vi_c(ind):
@@ -122,7 +123,7 @@ def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, nodes):
         p_k_new = p_u_k_new * p_v_k_new * stick_ratio_k_new
 
         p += [p_k_new]
-        return p / sum(p)
+        return p
 
     def get_map():
         """
@@ -199,7 +200,6 @@ def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, nodes):
         """
         vi['lambda_sum'] = vi['h_a'].sum(axis=0) + vi['h_b'].sum(axis=0)
         idx = [i for i in reversed(np.argsort(vi['lambda_sum']))]
-        print(idx)
         vi['lambda_sum'] = vi['lambda_sum'][idx]
         vi['h_a'] = vi['h_a'][:,idx]
         vi['h_b'] = vi['h_b'][:,idx]
@@ -209,6 +209,10 @@ def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, nodes):
         res = np.zeros(size, dtype=int)
         res[pos] = 1
         return res
+
+    def heldout_loglikelihood():
+        """"""
+        pass
 
     def vi_train_stochastic(batch_size=100, locally_collapsed=False):
         """
@@ -229,17 +233,22 @@ def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, nodes):
 
                 # locally collapsed vi update
                 p_ind = locally_collapsed_c_sample(ind)
-                assert(abs(sum(p_ind)-1) < 0.00001)
                 # 1 sample for approximating expectation
                 # emp = multinomial(1, p_ind)
 
-                c = choice(len(p_ind), p=p_ind)
-                state['assignments'][ind] = c
-                emp = onehot(len(p_ind), c)
+                # c = choice(len(p_ind), p=p_ind)
+                # state['assignments'][ind] = c
+                # emp = onehot(len(p_ind), c)
+                #
+                # if emp[-1] == 1 and p_ind:
 
                 # new cluster!
-                if emp[-1] == 1:
+                thres = p_ind[-1] / sum(p_ind)
+                if thres > train['eps']:
                     add_new_cluster()
+                    emp = p_ind / sum(p_ind)
+                else:
+                    emp = p_ind[:-1] / sum(p_ind[:-1])
 
                 for k in range(state['n_clusters']):
                     u = fixed['edges'][ind,0]
@@ -248,12 +257,11 @@ def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, nodes):
                     vi['h_a'][u,k] = (1-rho) * vi['h_a'][u,k] + rho * (fixed['gamma'][u] + n_edges * emp[k])
                     vi['h_b'][v,k] = (1-rho) * vi['h_b'][v,k] + rho * (fixed['gamma'][v] + n_edges * emp[k])
 
-                optimal_reordering()
+                # optimal_reordering()
 
                 for k in range(state['n_clusters']):
                     vi['h_sticks'][0][k] = (1-rho) * vi['h_sticks'][0][k] + rho * (1 + n_edges * emp[k])
                     vi['h_sticks'][1][k] = (1-rho) * vi['h_sticks'][1][k] + rho * (fixed['alpha'] + n_edges * emp[k+1:].sum())
-
 
             print('train | iter {}'.format(iter))
             cluster = get_map()
@@ -283,5 +291,9 @@ if __name__ == '__main__':
     plt.imshow(adj)
 
     state,vi = trunfreeInfiniteClusterDirichletMix(1, np.array(edges), np.array(nodes))
+
+    # from main_test.run import get_data
+    # links_train,links_test,clusters_train,clusters_test,nodes = get_data('main_test/toy_test')
+    # state,vi = sequentialDN(np.array(links_train), np.array(nodes))
     # print(vi['h_c'])
     # print(vi['h_alpha'])

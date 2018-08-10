@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 K = 7
-M = 70
+M = 200
 
 # phi = np.random.randint(1,10,size=K)
 phi = np.array([10]*K,dtype=float)
@@ -13,8 +13,8 @@ beta = 10
 
 # cluster parameter
 theta = np.random.beta(alpha,beta,(K,K))
-for i in range(K):
-    theta[i,i] += (1 - theta[i,i]) / 2
+# for i in range(K):
+#     theta[i,i] += (1 - theta[i,i]) /
 
 pi = dirichlet(phi)
 
