@@ -96,7 +96,10 @@ if __name__ == '__main__':
 
     dj = UnionFind()
     dj.union(1, 2)
+    dj.union(2, 3)
+    dj.union(4, 5)
     print(dj.parent_pointers)
-    print(dj.num_to_objects)
-    print(dj.objects_to_num)
+    dj.parent_pointers.pop([0, 1], None)
+    # print(dj.num_to_objects)
+    # print(dj.objects_to_num)
 

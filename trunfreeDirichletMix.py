@@ -65,39 +65,6 @@ def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, edges_test):
         'eps': 0.001 # new cluster threshold
     }
 
-    # def vi_c(ind):
-    #     """
-    #     update c_hat given an edge
-    #     :return:
-    #     """
-    #
-    #     u = fixed['edges'][ind,0]
-    #     v = fixed['edges'][ind,1]
-    #     logp = []
-    #     for k in state['cluster_ids']:
-    #         psi_alpha = psi(vi['h_alpha'][k])
-    #         psi_a_k_u = psi(vi['h_a'][k][u])
-    #         psi_a_k_un = psi(sum(vi['h_a'][k]))
-    #         psi_a_k_v = psi(vi['h_b'][k][v])
-    #         psi_a_k_vn = psi(sum(vi['h_b'][k]))
-    #         # print(psi_alpha, psi_a_k_u, psi_a_k_un, psi_a_k_v, psi_a_k_vn)
-    #         logpk = psi_alpha + psi_a_k_u - psi_a_k_un + psi_a_k_v - psi_a_k_vn
-    #         logp += [logpk]
-    #
-    #     #underflow
-    #     logp = logp - max(logp)
-    #     p = np.exp(logp)
-    #     return p / sum(p)
-
-    # def get_local_estimate():
-    #     p_h_c = []
-    #     for ind,e in enumerate(edges):
-    #         p_ind = vi_c(ind)
-    #         p_h_c.append(p_ind)
-    #         assert(abs(sum(p_ind) - 1) < 0.00001)
-    #     vi['h_c'] = p_h_c
-    #     return vi['h_c']
-
     def locally_collapsed_c_sample(ind):
         u = fixed['edges'][ind,0]
         v = fixed['edges'][ind,1]
@@ -152,6 +119,10 @@ def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, edges_test):
             map += [np.argmax(p)]
 
         return map
+
+    def heldout_loglikelihood(edges_test):
+
+
 
     def init_vi():
         """
