@@ -170,7 +170,6 @@ def sequentialDN(edges, nodes,edges_test):
             u = e[0]
             v = e[1]
             lp = 0
-            print(len(state['cluster_ids']))
             for cluster in state['cluster_ids']:
                 # print(vi['e_w'][cluster], vi['e_zeta1'][cluster][u], vi['e_zeta2'][cluster][v])
                 lp += vi['e_w'][cluster] * vi['e_zeta1'][cluster][u] * vi['e_zeta2'][cluster][v]
@@ -186,6 +185,26 @@ def sequentialDN(edges, nodes,edges_test):
         print(len(edges_test))
         return ll_sum / len(edges_test)
 
+    def merge(merger, merged):
+        """
+        function to merge 2 groups
+        :param merger:
+        :param merged:
+        :return:
+        """
+        vi['zeta1'][merger] = vi['zeta1'][merger] + vi['zeta1'][merged]
+        vi['zeta2'][merger] = vi['zeta2'][merger] + vi['zeta2'][merged]
+        vi['zeta_sum1'][merger] += vi['zeta_sum1'][merged]
+        vi['zeta_sum2'][merger] += vi['zeta_sum2'][merged]
+        vi['w'][merger] += vi['w'][merged]
+
+        state['cluster_ids'].remove(merged)
+        vi['zeta1'].pop(merged, None)
+        vi['zeta2'].pop(merged, None)
+        vi['zeta_sum1'].pop(merged, None)
+        vi['zeta_sum2'].pop(merged, None)
+        vi['w'].pop(merged, None)
+        state['n_clusters'] -= 1
 
     def vi_train_stochastic():
         """
@@ -242,7 +261,7 @@ def sequentialDN(edges, nodes,edges_test):
                     # assert(abs(vi['zeta1'][cluster].sum() - vi['zeta_sum1'][cluster]) < 0.000001)
                     # assert(abs(vi['zeta2'][cluster].sum() - vi['zeta_sum2'][cluster]) < 0.000001)
                 # print(state['n_clusters'])
-                if ind % 100 == 0:
+                if ind % 50 == 0 or ind == n_edges - 1:
                     # merge
                     # for i in state['cluster_ids']:
                     #     for j in state['cluster_ids']:
@@ -259,7 +278,7 @@ def sequentialDN(edges, nodes,edges_test):
                     #                     pj = 0
                     #                 sc += 1 / (ind+1) * abs(pi - pj)
                     #             if sc < train['eps_d']:
-                                    # merge
+                    #                 # merge
 
 
                     # prune
