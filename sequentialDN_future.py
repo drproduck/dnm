@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from collections import Counter
 import copy
-
+from main_test.run import display_adjacency
 # mixture of exchangable edges with INfinite clusters using truncation-free variational inference
 
 def get_data(fname):
@@ -55,11 +55,11 @@ class sequentialDN():
             'log_ll': [] # heldout loglikelihood for each iteration
         }
 
-        self.tau = 3
+        self.tau = 1
         # store hyperparameters (unchanged)
         self.fixed = {
             'tau': self.tau, # prior for Dirichlet of node weight
-            'alpha': 3, # Beta prior for cluster stick breaking ~ Beta(1, \alpha)
+            'alpha': 1, # Beta prior for cluster stick breaking ~ Beta(1, \alpha)
             'lambda1': np.array([self.tau/self.n_nodes]*len(nodes), dtype=float), # Dirichlet prior for node
             'lambda2': None, # Dirichlet prior total count
             'edges': edges,
@@ -85,9 +85,9 @@ class sequentialDN():
             'n_iter': 1,
             'batch_size': 100,
             'n_sample': 100,
-            'eps': 0.2, # new cluster threshold
+            'eps': 0.5, # new cluster threshold
             'eps_r': 0.01, # prune
-            'eps_d': 0.01, # merge
+            'eps_d': 0, # merge
         }
 
     def marginal_ll(self, ind, cluster):
@@ -237,11 +237,11 @@ class sequentialDN():
                     sc = 0
                     for ind in range(n_cur_edges):
                         if i in self.vi['rho'][ind]:
-                            pi = self.vi['rho'][ind][i]
+                            pi = self.vi['rho'][ind][i] / self.vi['rho_sum'][ind]
                         else:
                             pi = 0
                         if j in self.vi['rho'][ind]:
-                            pj = self.vi['rho'][ind][j]
+                            pj = self.vi['rho'][ind][j] /self.vi['rho_sum'][ind]
                         else:
                             pj = 0
                         sc += 1 / (ind+1) * abs(pi - pj)
@@ -280,6 +280,27 @@ class sequentialDN():
 
         return pruned
 
+    def generate(self, n):
+        """
+
+        :return:
+        """
+        edges_gen = []
+        ids = []
+        w = []
+        assert(len(self.state['cluster_ids']) == len(self.vi['e_w']))
+        for k,v in self.vi['e_w'].items():
+            ids += [k]
+            w += [v]
+        assert(abs(sum(w) - 1) < 0.000001)
+        clusters = choice(ids, size=n, replace=True, p=w)
+        for cluster in clusters:
+            a = choice(self.n_nodes, p=self.vi['e_zeta1'][cluster], replace=True)
+            b = choice(self.n_nodes, p=self.vi['e_zeta2'][cluster], replace=True)
+            edges_gen.append([a,b])
+
+        return np.array(edges_gen), clusters
+
     def vi_train_stochastic(self):
         """
         update lambda, optimal ordering, then update stick
@@ -292,16 +313,17 @@ class sequentialDN():
         for iter in range(self.train['n_iter']):
 
             # first point first cluster
-            self.add_new_cluster()
-            u = self.edges[0,0]
-            v = self.edges[0,1]
-            self.vi['w'][0] = 1
-            self.vi['rho'][0] = {0: 1}
-            self.vi['rho_sum'][0] = 1
-            self.vi['zeta1'][0][u] += 1
-            self.vi['zeta_sum1'][0] += 1
-            self.vi['zeta2'][0][v] += 1
-            self.vi['zeta_sum2'][0] += 1
+            if iter == 0:
+                self.add_new_cluster()
+                u = self.edges[0,0]
+                v = self.edges[0,1]
+                self.vi['w'][0] = 1
+                self.vi['rho'][0] = {0: 1}
+                self.vi['rho_sum'][0] = 1
+                self.vi['zeta1'][0][u] += 1
+                self.vi['zeta_sum1'][0] += 1
+                self.vi['zeta2'][0][v] += 1
+                self.vi['zeta_sum2'][0] += 1
 
             for ind in range(1,self.n_edges):
                 u = self.edges[ind,0]
@@ -338,6 +360,9 @@ class sequentialDN():
 
                     assert(abs(self.vi['zeta1'][cluster].sum() - self.vi['zeta_sum1'][cluster]) < 0.000001)
                     assert(abs(self.vi['zeta2'][cluster].sum() - self.vi['zeta_sum2'][cluster]) < 0.000001)
+
+                if ind % 50 == 0:
+                    self.state['log_ll'] += [self.heldout_loglikelihood(self.edges_test)]
                 if ind % 200 == 0 or ind == self.n_edges - 1:
 
                     # merge
@@ -350,14 +375,16 @@ class sequentialDN():
 
                     print(self.state['n_clusters'])
 
-                    self.state['log_ll'] += [self.heldout_loglikelihood(self.edges_test)]
+                    # CHECK
+                    for ind in range(ind+1):
+                        x = sum([i for i in self.vi['rho'][ind].values()])
+                        assert(abs(x - self.vi['rho_sum'][ind]) < 0.00001)
 
             self.state['log_ll'] += [self.heldout_loglikelihood(self.edges_test)] # 1 last time
 
             assert(self.state['n_clusters'] == len(self.state['cluster_ids']))
             print('self.train | iter {}'.format(iter))
             cluster = self.get_map()
-            # cluster = self.state['assignments']
             cmap = colors.ListedColormap(['white', 'red', 'green', 'blue','yellow','purple','orange','brown','black'])
             bounds = [0,1,2,3,4,5,6,7,8,9]
             norm = colors.BoundaryNorm(bounds, cmap.N)
@@ -368,8 +395,10 @@ class sequentialDN():
             sz = self.edges.max(axis=1).max() + 1
             adj = np.zeros([sz,sz],dtype=int)
             for e,c in zip(self.edges, cluster):
+                # adj[e[0], e[1]] = c
                 adj[e[0], e[1]] = color[c]
             plt.imshow(adj,cmap=cmap,norm=norm)
+            # plt.imshow(adj)
 
             plt.pause(1)
 
@@ -380,8 +409,8 @@ class sequentialDN():
 
 
 if __name__ == '__main__':
-    from main_test.run import get_data
-    links_train,links_test,clusters_train,clusters_test,nodes = get_data('main_test/toy_test')
+    from main_test.run import get_data_will
+    links_train,links_test,clusters_train,clusters_test,nodes,node_clusters = get_data_will('toy_test',ratio=0.9)
     DN = sequentialDN(links_train, np.array(nodes), links_test)
     DN.vi_train_stochastic()
     # edges, nodes, adj = get_data('sbm')
@@ -389,5 +418,13 @@ if __name__ == '__main__':
     # plt.imshow(adj)
     #
     # self.state,self.vi = sequentialDN(np.array(edges), np.array(nodes))
+    edges, clusters = DN.generate(100)
+    display_adjacency(edges, clusters)
+
+
+
+
+
+
 
 

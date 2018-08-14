@@ -22,26 +22,26 @@ def get_data(fname):
     return res, adj
 
 
-def mdnd(n_clusters, edges):
+def mdnd(n_clusters, edges, train=None):
     """main algorithm"""
     n_edges = edges.shape[0]
 
     # set up some layout for graph plot
-    edge_tuple = []
-    for i in range(len(edges)):
-        edge_tuple.append(tuple(edges[i, :]))
-
-    G = nx.from_edgelist(edges)
-    pos = nx.spring_layout(G, 2)
-    pos[0] = np.array([0,0])
-    pos[2] = np.array([1,0])
-    pos[1] = np.array([0.5,1])
-    pos[6] = np.array([0.5,2])
-    pos[7] = np.array([0.5,3])
-    pos[8] = np.array([0.5,4])
-    pos[3] = np.array([0.5,5])
-    pos[4] = np.array([0,6])
-    pos[5] = np.array([1,6])
+    # edge_tuple = []
+    # for i in range(len(edges)):
+    #     edge_tuple.append(tuple(edges[i, :]))
+    #
+    # G = nx.from_edgelist(edges)
+    # pos = nx.spring_layout(G, 2)
+    # pos[0] = np.array([0,0])
+    # pos[2] = np.array([1,0])
+    # pos[1] = np.array([0.5,1])
+    # pos[6] = np.array([0.5,2])
+    # pos[7] = np.array([0.5,3])
+    # pos[8] = np.array([0.5,4])
+    # pos[3] = np.array([0.5,5])
+    # pos[4] = np.array([0,6])
+    # pos[5] = np.array([1,6])
 
 
     # store variable that will be sampled
@@ -56,9 +56,9 @@ def mdnd(n_clusters, edges):
 
     # store hyperparameters (unchanged)
     fixed = {
-        'alpha_D': 1, # control the number of clusters
+        'alpha_D': 5, # control the number of clusters
         'tau': 1, # control cluster overlap
-        'gamma_H': 1, # control number of nodes
+        'gamma_H': 1000, # control number of nodes
         'edges': edges,
         'n_edges': n_edges,
         'node_ids': None,
@@ -71,10 +71,11 @@ def mdnd(n_clusters, edges):
     }
 
     # train parameters
-    train = {
-        'n_iter': 1000,
-        'n_burnin': 100,
-    }
+    if train is None:
+        train = {
+            'n_iter': 100,
+            'n_burnin': 10,
+        }
 
     # samples from samplers i.e number of samples = number of sampling iterations
     sample = {
@@ -272,38 +273,20 @@ def mdnd(n_clusters, edges):
 
             plt.clf()
             plt.subplot(121)
-            # cm = plt.get_cmap('gist_rainbow')
-            # cNorm = colors.Normalize(vmin=0, vmax=NUM_COLORS - 1)
-            # scalarMap = mplcm.ScalarMappable(norm=cNorm, cmap=cm)
-            # color map
-            # cmap = colors.ListedColormap(['white', 'red', 'green', 'blue','yellow'])
-            # bounds = [0,1,2,3,4]
-            # norm = colors.BoundaryNorm(bounds, cmap.N)
-            #
-            # nx.draw_networkx_nodes(G, pos, node_size=1)
-            # nx.draw_networkx_edges(G, pos, edgelist=edge_tuple, edge_color=state['assignments'])
-            # plt.xlim(0, 1)
-            # plt.ylim(-1, 7)
-            # plt.subplot(122)
-            # adj = np.zeros((n_nodes, n_nodes), dtype=int)
 
-            # color the 3 biggest clusters + 1 color for the rest
-            # count = Counter(state['assignments'])
-            # count = [i for i in count.keys()]
-            # count = sorted(set(state['assignments']))
-            # print(count)
-            # temp = [1,2,3,4]
-            # color = {count[x]: temp[x] if x < 3 else temp[3] for x in range(len(count))}
-            # for e,c in zip(edges, state['assignments']):
-            #     adj[e[0], e[1]] = color[c]
-            # plt.imshow(adj, cmap=cmap, norm=norm)
-
-            # for n,e in enumerate(edges):
-            #     adj[e[0],e[1]] = state['assignments'][n] + 5
-            #
-            # plt.imshow(adj)
-            #
-            # plt.pause(1)
+            cmap = colors.ListedColormap(['white', 'red', 'green', 'blue','yellow','purple','orange','brown','black'])
+            bounds = [0,1,2,3,4,5,6,7,8,9]
+            norm = colors.BoundaryNorm(bounds, cmap.N)
+            count = Counter(state['assignments']).most_common()
+            count = [c[0] for c in count]
+            temp = [1,2,3,4,5,6,7,8,9]
+            color = {count[x]: temp[x] if x < 8 else temp[8] for x in range(len(count))}
+            sz = edges.max(0).max() + 1
+            adj = np.zeros((sz,sz),dtype=int)
+            for e,c in zip(edges, state['assignments']):
+                adj[e[0], e[1]] = color[c]
+            plt.imshow(adj,cmap=cmap,norm=norm)
+            plt.pause(0.1)
 
         # plt.show()
 
@@ -313,22 +296,11 @@ def mdnd(n_clusters, edges):
 
 
 if __name__ == '__main__':
-    edges, adj = get_data('bell')
-    n_edges = len(edges)
-    state,sample,train = mdnd(2, np.array(edges))
-    sim = np.zeros([n_edges, n_edges], dtype=int)
-    for i in range(n_edges):
-        for j in range(n_edges):
-            for k in range(train['n_iter']):
-                if sample['assignments'][k][i] == sample['assignments'][k][j]:
-                    sim[i,j] += 1
-    print(sim)
-    top = np.zeros([n_edges,3])
-    for i,row in enumerate(sim):
-        row[i] = 0
-        a = np.argsort(row)
-        top[i][:3] = a[-3:]
-    print(top)
-    plt.show()
+    # edges, adj = get_data('bell')
+    # n_edges = len(edges)
+    # state,sample,train = mdnd(2, np.array(edges))
 
+    from main_test.run import get_data_will
+    links_train,links_test,clusters_train,clusters_test,nodes = get_data_will('main_test/toy_test')
+    mdnd(4,np.array(links_train))
 

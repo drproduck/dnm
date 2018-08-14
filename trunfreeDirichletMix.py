@@ -23,7 +23,7 @@ def get_data(fname):
     return res, nodes, adj
 
 
-def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, edges_test):
+def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, nodes, edges_test=None):
     """replace HDP with mixture of Dirichlet-Categorical"""
     n_edges = edges.shape[0]
     n_nodes = len(nodes)
@@ -34,7 +34,8 @@ def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, edges_test):
         # 'assignments': np.array([choice(n_clusters, replace=True) for _ in range(n_edges)], dtype=int),
         # the cluster assignment of each edge
         # 'sizes': Counter({i: 0 for i in range(n_clusters)}),  # size of each cluster
-        'assignments': np.zeros(n_edges)
+        'assignments': [],
+        'log_ll': []
     }
 
     # store hyperparameters (unchanged)
@@ -51,18 +52,20 @@ def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, edges_test):
         'h_a': np.zeros((n_nodes, n_clusters), dtype=float), # vi for dirichlet prior of A_k p(A_k|h_a) = Dir(h_a)
         'h_b': np.zeros((n_nodes, n_clusters), dtype=float), # vi for dirichlet prior of B_k
         'h_sticks': np.zeros((2, n_clusters), dtype=float), # the stick parameters a_k and b_k, can be expanded as new clusters are needed (truncate???)
-        'lambda_sum': None # for optimal reordering, is the cluster size in [h_a,h_b]
+        'lambda_sum': None, # for optimal reordering, is the cluster size in [h_a,h_b]
+        'cluster_truncate': 0.01
     }
 
     # train parameters
     train = {
         'kappa': 0.7, # robbins-monro
         'tau': 0, # cooler
-        'n_iter': 8000,
+        'n_iter': 10,
         'n_validate': 200,
         'batch_size': 100,
         'n_sample': 100,
-        'eps': 0.001 # new cluster threshold
+        'eps': 0.1, # new cluster threshold
+        'best_validation': None,
     }
 
     def locally_collapsed_c_sample(ind):
@@ -73,16 +76,14 @@ def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, edges_test):
 
         # for k old
         for k in range(state['n_clusters']):
-            p_u_k = (vi['h_a'][u,k]) / sum(vi['h_a'][:,k])
-            p_v_k = (vi['h_b'][v,k]) / sum(vi['h_b'][:,k])
+            p_u_k = (vi['h_a'][u][k]) / sum(vi['h_a'][:,k])
+            p_v_k = (vi['h_b'][v][k]) / sum(vi['h_b'][:,k])
             stick_ratio_k = vi['h_sticks'][0,k] / (vi['h_sticks'][0,k] + vi['h_sticks'][1,k]) # u_k / (u_k + v_k)
 
             # marginal likelihood of DP
             p_k = p_u_k * p_v_k * stick_ratio_k * beta_v_prod
             beta_v_prod *= vi['h_sticks'][1,k] / (vi['h_sticks'][0,k] + vi['h_sticks'][1,k])
-
             p += [p_k]
-
         # for k new, use prior distributions
         p_u_k_new = fixed['gamma'][u] / sum(fixed['gamma'])
         p_v_k_new = fixed['gamma'][v] / sum(fixed['gamma'])
@@ -98,31 +99,56 @@ def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, edges_test):
         :return:
         """
         map = []
+
         for ind in range(n_edges):
 
             u = fixed['edges'][ind,0]
             v = fixed['edges'][ind,1]
             p = []
-            beta_v_prod = 1 # \prod v_l / (u_l + v_l)
 
-            for k in range(state['n_clusters']):
-                p_u_k = (vi['h_a'][u,k]) / sum(vi['h_a'][:,k])
-                p_v_k = (vi['h_b'][v,k]) / sum(vi['h_b'][:,k])
-                stick_ratio_k = vi['h_sticks'][0,k] / (vi['h_sticks'][0,k] + vi['h_sticks'][1,k]) # u_k / (u_k + v_k)
+            for k in range(len(vi['beta_v_prod'])-1):
+                p_u_k = (vi['e_h_a'][u,k])
+                p_v_k = (vi['e_h_b'][v,k])
+                stick_ratio_k = vi['e_h_sticks'][0,k]
 
                 # marginal likelihood of DP
-                p_k = p_u_k * p_v_k * stick_ratio_k * beta_v_prod
-                beta_v_prod *= vi['h_sticks'][1,k] / (vi['h_sticks'][0,k] + vi['h_sticks'][1,k])
-
+                p_k = p_u_k * p_v_k * stick_ratio_k * vi['beta_v_prod'][k]
                 p += [p_k]
 
             map += [np.argmax(p)]
-
         return map
+
+    def update_expectation():
+
+        vi['e_h_a'] = vi['h_a'] / vi['h_a'].sum(axis=0)
+        vi['e_h_b'] = vi['h_b'] / vi['h_b'].sum(axis=0)
+        vi['e_h_sticks'] = vi['h_sticks'] / vi['h_sticks'].sum(axis=0)
+
+        vi['beta_v_prod'] = [1] # \prod v_l / (u_l + v_l)
+        for k in range(state['n_clusters']):
+            vi['beta_v_prod'] += [vi['beta_v_prod'][-1] * vi['e_h_sticks'][1,k]]
+            if vi['beta_v_prod'][-1] < vi['cluster_truncate']: # remaining stick too thin, stop
+                break
 
     def heldout_loglikelihood(edges_test):
 
+        ll_sum = 0
+        for e in edges_test:
+            u = e[0]
+            v = e[1]
+            lp = 0
 
+            for cluster in range(len(vi['beta_v_prod']) - 1):
+                # print(self.vi['e_w'][cluster], self.vi['e_zeta1'][cluster][u], self.vi['e_zeta2'][cluster][v])
+
+                lp += vi['e_h_a'][u,cluster] * vi['e_h_b'][v,cluster] * vi['e_h_sticks'][0,cluster] * vi['beta_v_prod'][cluster]
+                if np.isneginf(np.log(lp)):
+                    print(vi['e_h_a'][u,cluster], vi['e_h_b'][v,cluster], vi['e_h_sticks'][0,cluster])
+                    exit(0)
+
+            ll_sum += np.log(lp)
+        assert(not np.isneginf(ll_sum))
+        return ll_sum / len(edges_test)
 
     def init_vi():
         """
@@ -130,12 +156,12 @@ def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, edges_test):
         :return:
         """
 
-        vi['h_a'] = gamma(1.0, 1.0, (n_nodes, state['n_clusters'])) * 100 / (n_nodes * state['n_clusters'])
+        # vi['h_a'] = gamma(1.0, 1.0, (n_nodes, state['n_clusters'])) * 100 / (n_nodes * state['n_clusters'])
         # vi['h_a'] = np.subtract(vi['h_a'], fixed['gamma'].reshape(n_nodes, 1))
-        vi['h_b'] = gamma(1.0, 1.0, (n_nodes, state['n_clusters'])) * 100 / (n_nodes * state['n_clusters'])
-        # vi['h_b'] = np.subtract(vi['h_b'], fixed['gamma'].reshape(n_nodes, 1))
-        # vi['h_a'] = np.tile(fixed['gamma'].reshape((n_nodes,1)), (1,n_clusters)) + np.random.rand(n_nodes, n_clusters)
-        # vi['h_b'] = np.tile(fixed['gamma'].reshape((n_nodes,1)), (1,n_clusters)) + np.random.rand(n_nodes, n_clusters)
+        # vi['h_b'] = gamma(1.0, 1.0, (n_nodes, state['n_clusters'])) * 100 / (n_nodes * state['n_clusters'])
+        # vi['h_b'] = np.sub/tract(vi['h_b'], fixed['gamma'].reshape(n_nodes, 1))
+        vi['h_a'] = np.tile(fixed['gamma'].reshape((n_nodes,1)), (1,n_clusters)) + np.random.rand(n_nodes, n_clusters)
+        vi['h_b'] = np.tile(fixed['gamma'].reshape((n_nodes,1)), (1,n_clusters)) + np.random.rand(n_nodes, n_clusters)
         vi['h_sticks'][0] = 1
         vi['h_sticks'][1] = np.arange(state['n_clusters'],0,-1)
         # vi['h_sticks'] = np.tile(np.array([1,fixed['alpha']]).reshape((2,1)), (1,n_clusters)) + np.random.rand(2, n_clusters)
@@ -169,9 +195,8 @@ def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, edges_test):
         reorder clusters
         :return:
         """
-        vi['lambda_sum'] = vi['h_a'].sum(axis=0) + vi['h_b'].sum(axis=0)
-        idx = [i for i in reversed(np.argsort(vi['lambda_sum']))]
-        vi['lambda_sum'] = vi['lambda_sum'][idx]
+        stick_sizes = vi['h_sticks'][0,:] / vi['h_sticks'].sum(axis=0)
+        idx = [i for i in reversed(np.argsort(stick_sizes))]
         vi['h_a'] = vi['h_a'][:,idx]
         vi['h_b'] = vi['h_b'][:,idx]
         # vi['h_sticks'] = vi['h_sticks'][:,idx]
@@ -180,10 +205,6 @@ def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, edges_test):
         res = np.zeros(size, dtype=int)
         res[pos] = 1
         return res
-
-    def heldout_loglikelihood():
-        """"""
-        pass
 
     def vi_train_stochastic(batch_size=100, locally_collapsed=False):
         """
@@ -228,43 +249,58 @@ def trunfreeInfiniteClusterDirichletMix(n_clusters, edges, edges_test):
                     vi['h_a'][u,k] = (1-rho) * vi['h_a'][u,k] + rho * (fixed['gamma'][u] + n_edges * emp[k])
                     vi['h_b'][v,k] = (1-rho) * vi['h_b'][v,k] + rho * (fixed['gamma'][v] + n_edges * emp[k])
 
-                # optimal_reordering()
-
                 for k in range(state['n_clusters']):
                     vi['h_sticks'][0][k] = (1-rho) * vi['h_sticks'][0][k] + rho * (1 + n_edges * emp[k])
                     vi['h_sticks'][1][k] = (1-rho) * vi['h_sticks'][1][k] + rho * (fixed['alpha'] + n_edges * emp[k+1:].sum())
 
-            print('train | iter {}'.format(iter))
-            cluster = get_map()
-            # cluster = state['assignments']
-            cmap = colors.ListedColormap(['white', 'red', 'green', 'blue','yellow','purple','orange','brown','black'])
-            bounds = [0,1,2,3,4,5,6,7,8,9]
-            norm = colors.BoundaryNorm(bounds, cmap.N)
-            count = Counter(cluster).most_common()
-            count = [c[0] for c in count]
-            temp = [1,2,3,4,5,6,7,8,9]
-            color = {count[x]: temp[x] if x < 8 else temp[8] for x in range(len(count))}
-            for e,c in zip(edges, cluster):
-                adj[e[0], e[1]] = color[c]
-            plt.imshow(adj,cmap=cmap,norm=norm)
-            plt.pause(1)
+                optimal_reordering()
+            if ind % 50 == 0 or ind == n_edges - 1:
+                update_expectation()
+                print('number of clusters ',state['n_clusters'])
 
+                state['log_ll'] += [heldout_loglikelihood(edges_test)]
+                if train['best_validation'] is None:
+                    train['best_validation'] = 0
+                else:
+                    if state['log_ll'][-1] > train['best_validation']:
+                        train['best_validation'] = len(state['log_ll']) - 1
+
+                print('train | iter {}'.format(iter))
+                cluster = get_map()
+                state['assignments'] += [np.array(cluster)]
+                # cluster = state['assignments']
+                cmap = colors.ListedColormap(['white', 'red', 'green', 'blue','yellow','purple','orange','brown','black'])
+                bounds = [0,1,2,3,4,5,6,7,8,9]
+                norm = colors.BoundaryNorm(bounds, cmap.N)
+                count = Counter(cluster).most_common()
+                count = [c[0] for c in count]
+                temp = [1,2,3,4,5,6,7,8,9]
+                color = {count[x]: temp[x] if x < 8 else temp[8] for x in range(len(count))}
+                sz = edges.max(axis=0).max() + 1
+                adj = np.zeros([sz,sz], dtype=int)
+                for e,c in zip(edges, cluster):
+                    adj[e[0], e[1]] = color[c]
+                plt.imshow(adj,cmap=cmap,norm=norm)
+                plt.pause(1)
+
+        print(state['log_ll'])
+        plt.plot(state['log_ll'])
         plt.show()
 
     vi_train_stochastic(1, locally_collapsed=True)
 
-    return state,vi
+    return state,vi,train
 
 
 if __name__ == '__main__':
-    edges, nodes, adj = get_data('sbm')
-    n_edges = len(edges)
-    plt.imshow(adj)
+    # edges, nodes, adj = get_data('sbm')
+    # n_edges = len(edges)
+    # plt.imshow(adj)
+    #
+    # state,vi = trunfreeInfiniteClusterDirichletMix(1, np.array(edges), np.array(nodes))
 
-    state,vi = trunfreeInfiniteClusterDirichletMix(1, np.array(edges), np.array(nodes))
-
-    # from main_test.run import get_data
-    # links_train,links_test,clusters_train,clusters_test,nodes = get_data('main_test/toy_test')
-    # state,vi = sequentialDN(np.array(links_train), np.array(nodes))
+    from main_test.run import get_data_will
+    links_train,links_test,clusters_train,clusters_test,nodes,node_clusters = get_data_will('toy_test',ratio=0.9)
+    state,vi,train = trunfreeInfiniteClusterDirichletMix(2,np.array(links_train), nodes, links_test)
     # print(vi['h_c'])
     # print(vi['h_alpha'])

@@ -2,9 +2,9 @@
 from numpy.random import *
 import matplotlib.pyplot as plt
 import numpy as np
-
+import networkx as nx
 K = 7
-M = 200
+M = 100
 
 # phi = np.random.randint(1,10,size=K)
 phi = np.array([10]*K,dtype=float)
@@ -35,7 +35,12 @@ for i in range(M):
         if adj[i,j] == 1:
             f.write('{} {}\n'.format(i,j))
 
-# adj = np.maximum(adj, adj.T)
+# graph = nx.MultiDiGraph(adj)
+# pos = nx.spring_layout(graph)
+# nx.draw_networkx_nodes(graph, pos, node_size=10)
+# nx.draw_networkx_edges(graph, pos)
+# plt.show()
+adj = np.maximum(adj, adj.T)
 f.close()
 plt.spy(adj)
 plt.show()

@@ -57,8 +57,8 @@ while i < len(edges):
 import networkx as nx
 plt.figure(1)
 adj = np.matrix(adj)
-G = nx.from_edgelist(edges)
-
+# G = nx.from_edgelist(edges)
+G = nx.MultiDiGraph(adj)
 # print(len(edges))
 # print(len(G.edges), G.edges)
 # print(len(cs),cs)
@@ -67,16 +67,16 @@ for i in range(len(edges)):
     edge_tuple.append(tuple(edges[i,:]))
 print(edge_tuple)
 
-pos = nx.spring_layout(G, 2)
-nx.draw_networkx_edges(G, pos, edgelist=edge_tuple, edge_color=cs)
-nx.draw_networkx_nodes(G, pos, node_size=1)
+pos = nx.spring_layout(G)
+nx.draw_networkx_edges(G, pos)
+nx.draw_networkx_nodes(G, pos, node_size=10)
 plt.xlim(-1, 1)
 plt.ylim(-1, 1)
-print(edges)
-f = open('mdnd','w')
-for e in edges:
-    f.write('{} {}\n'.format(e[0], e[1]))
-# get the adj matrix
-plt.figure(2)
-plt.imshow(adj)
+# print(edges)
+# f = open('mdnd','w')
+# for e in edges:
+#     f.write('{} {}\n'.format(e[0], e[1]))
+# # get the adj matrix
+# plt.figure(2)
+# plt.imshow(adj)
 plt.show()

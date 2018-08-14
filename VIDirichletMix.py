@@ -190,6 +190,8 @@ def viDirichletMix(n_clusters, edges, nodes):
             count = [c[0] for c in count]
             temp = [1,2,3,4,5,6,7,8,9]
             color = {count[x]: temp[x] if x < 8 else temp[8] for x in range(len(count))}
+            sz = edges.max(0).max() + 1
+            adj = np.zeros((sz,sz),dtype=int)
             for e,c in zip(edges, cluster):
                 adj[e[0], e[1]] = color[c]
             plt.imshow(adj,cmap=cmap,norm=norm)
@@ -250,10 +252,13 @@ def viDirichletMix(n_clusters, edges, nodes):
 
 
 if __name__ == '__main__':
-    edges, nodes, adj = get_data('sbm')
-    n_edges = len(edges)
-    plt.imshow(adj)
-
-    state,vi = viDirichletMix(7, np.array(edges), np.array(nodes))
+    # edges, nodes, adj = get_data('sbm')
+    # n_edges = len(edges)
+    # plt.imshow(adj)
+    #
+    # state,vi = viDirichletMix(7, np.array(edges), np.array(nodes))
+    from main_test.run import get_data_will
+    links_train,links_test,clusters_train,clusters_test,nodes = get_data_will('main_test/toy_test')
+    state,vi = viDirichletMix(4,np.array(links_train), nodes)
     # print(vi['h_c'])
     # print(vi['h_alpha'])
