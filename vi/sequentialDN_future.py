@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from collections import Counter
 import copy
-from main_test.run import display_adjacency
+from data.get_data import display_adjacency, get_data_will
+
 # mixture of exchangable edges with INfinite clusters using truncation-free variational inference
 
 def get_data(fname):
@@ -409,7 +410,6 @@ class sequentialDN():
 
 
 if __name__ == '__main__':
-    from main_test.run import get_data_will
     links_train,links_test,clusters_train,clusters_test,nodes,node_clusters = get_data_will('toy_test',ratio=0.9)
     DN = sequentialDN(links_train, np.array(nodes), links_test)
     DN.vi_train_stochastic()

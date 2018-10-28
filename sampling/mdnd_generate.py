@@ -1,10 +1,4 @@
-import matplotlib.pyplot as plt
-from numpy.random import *
-import numpy as np
-import math
-from mpl_toolkits.mplot3d import Axes3D
-import matplotlib.mlab as mlab
-from Process import *
+from sampling.Process import *
 import matplotlib.pyplot as plt
 
 
@@ -27,7 +21,6 @@ edges = np.zeros((n,2), dtype=int)
 # cluster indicators are sorted so that adjacency matrix has blocks
 cs = sorted([D.sample() for _ in range(n)])
 print(cs)
-import copy
 for i,c in enumerate(cs):
     if c not in inlinks.keys():
         inlinks[c] = DirichletProcess(H,ap=tau) # contrl inlink cluster overlap

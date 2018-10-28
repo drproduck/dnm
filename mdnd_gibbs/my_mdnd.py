@@ -2,15 +2,20 @@ from matplotlib import colors
 import numpy as np
 from numpy.random import choice, dirichlet
 import matplotlib.pyplot as plt
-import networkx as nx
-from Process import Antoniak
 from collections import Counter
 
 
 # This is the main inference algorith mfor mixture of dirichlet networks
 
 def get_data(fname):
-    """get data edge list from file. should return an (n,2) array of edges"""
+    """
+    get data edge list from file. should return an (n,2) array of edges
+    :arg
+    fname: path to readable file
+    :returns
+    res: list of edges as n \times 2 np.array
+    ajd: adjacency matrix equivalent
+    """
     f = open(fname, 'r')
     res = np.array([list(map(int, line.strip().split(' '))) for line in f], dtype=int)
     sz = int(res.flatten().max() + 1)
@@ -300,7 +305,9 @@ if __name__ == '__main__':
     # n_edges = len(edges)
     # state,sample,train = mdnd(2, np.array(edges))
 
-    from main_test.run import get_data_will
-    links_train,links_test,clusters_train,clusters_test,nodes = get_data_will('main_test/toy_test')
+    from data.get_data import get_data_will, get_data_simple
+    # links_train,links_test,clusters_train,clusters_test,nodes,node_clusters = get_data_will('../csli_presentation/toy_test', 0.2)
+
+    links_train, nodes, adj = get_data_simple('../data/mdnd')
     mdnd(4,np.array(links_train))
 

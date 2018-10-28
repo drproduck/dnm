@@ -8,19 +8,7 @@ from scipy.special import psi
 import copy
 
 # mixture of exchangable edges with finite clusters using variational inference
-
-def get_data(fname):
-    """get data edge list from file. should return an (n,2) array of edges"""
-    f = open(fname, 'r')
-    res = np.array([list(map(int, line.strip().split(' '))) for line in f], dtype=int)
-    nodes = list(set(res.flatten()))
-    sz = int(res.flatten().max() + 1)
-    adj = np.zeros((sz, sz), dtype=int)
-
-    for e in res:
-        adj[e[0], e[1]] += 1
-
-    return res, nodes, adj
+"""finite mixture, finite coupled Dirichlet distributions"""
 
 
 def viDirichletMix(n_clusters, edges, nodes):
@@ -257,8 +245,8 @@ if __name__ == '__main__':
     # plt.imshow(adj)
     #
     # state,vi = viDirichletMix(7, np.array(edges), np.array(nodes))
-    from main_test.run import get_data_will
-    links_train,links_test,clusters_train,clusters_test,nodes = get_data_will('main_test/toy_test')
+    from data.get_data import get_data_will
+    links_train,links_test,clusters_train,clusters_test,nodes = get_data_will('csli_presentation/toy_test')
     state,vi = viDirichletMix(4,np.array(links_train), nodes)
     # print(vi['h_c'])
     # print(vi['h_alpha'])

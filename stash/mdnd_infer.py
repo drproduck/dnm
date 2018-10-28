@@ -1,12 +1,13 @@
 import numpy as np
 from numpy.random import choice, dirichlet
 import matplotlib.pyplot as plt
-import networkx as nx
-from Process import Antoniak
+from sampling.Process import Antoniak
 
 
 
 # This is the main inference algorith mfor mixture of dirichlet networks
+"""This is probably the version with incorrect formula"""
+
 
 def get_data(fname):
     """get data edge list from file. should return an (n,2) array of edges"""
@@ -262,7 +263,6 @@ def mdnd(n_clusters, edges):
                 print(len(set(state['assignments'])))
                 exit(1)
 
-            from collections import Counter
             plt.clf()
             adj = np.zeros((n_nodes, n_nodes), dtype=int)
             for e,c in zip(edges, state['assignments']):

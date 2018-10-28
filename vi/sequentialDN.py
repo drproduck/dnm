@@ -335,7 +335,7 @@ def sequentialDN(edges, nodes,edges_test):
 
 if __name__ == '__main__':
     from main_test.run import get_data
-    links_train,links_test,clusters_train,clusters_test,nodes = get_data('main_test/toy_test')
+    links_train,links_test,clusters_train,clusters_test,nodes = get_data('csli_presentation/toy_test')
     state,vi = sequentialDN(links_train, nodes, links_test)
     # print(vi['h_c'])
     # print(vi['h_alpha'])

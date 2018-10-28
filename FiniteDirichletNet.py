@@ -1,13 +1,11 @@
 from matplotlib import colors
 import numpy as np
-from numpy.random import choice, dirichlet
+from numpy.random import choice
 import matplotlib.pyplot as plt
-import networkx as nx
-from Process import Antoniak
 from collections import Counter
 import copy
 
-# This is the main inference algorith mfor mixture of dirichlet networks
+# This is the main inference algorithm for mixture of dirichlet networks
 
 def get_data(fname):
     """get data edge list from file. should return an (n,2) array of edges"""
@@ -269,7 +267,7 @@ def FiniteNodeInfiniteClusterDirichletNet(n_clusters, edges, nodes):
 
 
 if __name__ == '__main__':
-    edges, nodes, adj = get_data('sbm')
+    edges, nodes, adj = get_data('data/mdnd')
     n_edges = len(edges)
     state,sample,train = FiniteNodeInfiniteClusterDirichletNet(2, np.array(edges), np.array(nodes))
     sim = np.zeros([n_edges, n_edges], dtype=int)

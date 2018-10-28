@@ -2,12 +2,13 @@ from matplotlib import colors
 import numpy as np
 from numpy.random import choice, dirichlet, choice, multinomial, permutation, gamma
 import matplotlib.pyplot as plt
-import networkx as nx
 from collections import Counter
 from scipy.special import psi
 import copy
 
 # mixture of exchangable edges with INfinite clusters using truncation-free variational inference
+"""The "cluster" DP is variationally approximated by Truncation-free Stochastic Variational Inference for
+Bayesian Nonparametric Models Wang Blei"""
 
 def get_data(fname):
     """get data edge list from file. should return an (n,2) array of edges"""
@@ -299,7 +300,7 @@ if __name__ == '__main__':
     #
     # state,vi = trunfreeInfiniteClusterDirichletMix(1, np.array(edges), np.array(nodes))
 
-    from main_test.run import get_data_will
+    from data.get_data import get_data_will
     links_train,links_test,clusters_train,clusters_test,nodes,node_clusters = get_data_will('toy_test',ratio=0.9)
     state,vi,train = trunfreeInfiniteClusterDirichletMix(2,np.array(links_train), nodes, links_test)
     # print(vi['h_c'])
